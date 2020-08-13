@@ -23,49 +23,54 @@
         },
         "location": {
             "type": "string",
-            "defaultValue": "EastUS",
+            "defaultValue": "eastus",
             "metadata": {
                 "description": "Location for all resources."
             }
-        }
+        },
+        "vmCount": {
+            "type": "int",
+            "defaultValue": 3
+         }
     },
     "variables": {
+        "resourcePrefix": "Skylines",
         "imagePublisher": "Canonical",
         "imageOffer": "UbuntuServer",
         "ubuntuOSVersion": "18.04-LTS",
-        "nicName": "SkylinesVM1-nic",
-        "nicName2": "SkylinesVM2-nic",
-        "vmName": "SkylinesVM1",
-        "vmName2": "SkylinesVM2",
-        "availabilitySetName": "Skylines-AS",
-        "virtualNetworkName": "Skylines-Vnet-1",
-        "virtualNetworkName2": "Skylines-Vnet-2",
+        "availabilitySetName": "[concat(variables('resourcePrefix'),'-AS')]",
+        "virtualNetworkName": "[concat(variables('resourcePrefix'),'-Vnet-1')]",
+        "virtualNetworkName2": "[concat(variables('resourcePrefix'),'-Vnet-2')]",
         "addressPrefix": "10.0.0.0/16",
         "subnet1Name": "FrontEnd",
         "subnet1Prefix": "10.0.0.0/24",
         "addressPrefix2": "10.1.0.0/16",
         "subnet1Name2": "FrontEnd",
         "subnet1Prefix2": "10.1.0.0/24",
-        "networkSecurityGroupName": "Skylines-NSG",
+        "networkSecurityGroupName": "[concat(variables('resourcePrefix'),'-NSG')]",
         "vnetID": "[resourceId('Microsoft.Network/virtualNetworks',variables('virtualNetworkName'))]",
+        "vnetID2": "[resourceId('Microsoft.Network/virtualNetworks',variables('virtualNetworkName2'))]",
         "subnet1Ref": "[concat(variables('vnetID'),'/subnets/',variables('subnet1Name'))]",
+        "subnet2Ref": "[concat(variables('vnetID2'),'/subnets/',variables('subnet1Name2'))]"
     },
     "resources": [
         {
             "type": "Microsoft.Compute/availabilitySets",
-            "name": "[variables('availabilitySetName')]",
-            "apiVersion": "2016-04-30-preview",
+            "name": "[concat(variables('resourcePrefix'),'-AS')]",
+            "apiVersion": "2019-07-01",
             "location": "[parameters('location')]",
             "properties": {
                 "platformFaultDomainCount": 2,
-                "platformUpdateDomainCount": 2,
-                "managed": true
+                "platformUpdateDomainCount": 2
+            },
+            "sku": {
+                "name": "Aligned"
             }
         },
         {
-            "name": "[variables('networkSecurityGroupName')]",
+            "name": "[concat(variables('resourcePrefix'),'-NSG')]",
             "type": "Microsoft.Network/networkSecurityGroups",
-            "apiVersion": "2016-09-01",
+            "apiVersion": "2020-04-01",
             "location": "[parameters('location')]",
             "properties": {
                 "securityRules": [
@@ -86,9 +91,9 @@
             }
         },
         {
-            "apiVersion": "2015-06-15",
+            "apiVersion": "2020-04-01",
             "type": "Microsoft.Network/virtualNetworks",
-            "name": "[variables('virtualNetworkName')]",
+            "name": "[concat(variables('resourcePrefix'),'-Vnet-1')]",
             "location": "[parameters('location')]",
             "dependsOn": [
                 "[variables('networkSecurityGroupName')]"
@@ -113,9 +118,9 @@
             }
         },
         {
-            "apiVersion": "2015-06-15",
+            "apiVersion": "2020-04-01",
             "type": "Microsoft.Network/virtualNetworks",
-            "name": "[variables('virtualNetworkName2')]",
+            "name": "[concat(variables('resourcePrefix'),'-Vnet-2')]",
             "location": "[parameters('location')]",
             "dependsOn": [
                 "[variables('networkSecurityGroupName')]"
@@ -140,9 +145,9 @@
             }
         },
         {
-            "apiVersion": "2015-06-15",
+            "apiVersion": "2020-04-01",
             "type": "Microsoft.Network/networkInterfaces",
-            "name": "[variables('nicName')]",
+            "name": "[concat(variables('resourcePrefix'),'VM',copyIndex(1),'-nic')]",
             "location": "[parameters('location')]",
             "dependsOn": [
                 "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
@@ -159,15 +164,19 @@
                         }
                     }
                 ]
+            },
+            "copy": {
+                "name": "NICCopy",
+                "count": "[sub(parameters('vmCount'),1)]"
             }
         },
         {
-            "apiVersion": "2015-06-15",
+            "apiVersion": "2020-04-01",
             "type": "Microsoft.Network/networkInterfaces",
-            "name": "[variables('nicName2')]",
+            "name": "[concat(variables('resourcePrefix'),'VM',parameters('vmCount'),'-nic')]",
             "location": "[parameters('location')]",
             "dependsOn": [
-                "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
+                "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName2'))]"
             ],
             "properties": {
                 "ipConfigurations": [
@@ -176,7 +185,7 @@
                         "properties": {
                             "privateIPAllocationMethod": "Dynamic",
                             "subnet": {
-                                "id": "[variables('subnet1Ref')]"
+                                "id": "[variables('subnet2Ref')]"
                             }
                         }
                     }
@@ -184,12 +193,12 @@
             }
         },
         {
-            "apiVersion": "2016-04-30-preview",
+            "apiVersion": "2019-07-01",
             "type": "Microsoft.Compute/virtualMachines",
-            "name": "[variables('vmName')]",
+            "name": "[concat(variables('resourcePrefix'),'VM',copyIndex(1))]",
             "location": "[parameters('location')]",
             "dependsOn": [
-                "[concat('Microsoft.Network/networkInterfaces/', variables('nicName'))]",
+                "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('resourcePrefix'),'VM',copyIndex(1),'-nic'))]",
                 "[concat('Microsoft.Compute/availabilitySets/', variables('availabilitySetName'))]"
             ],
             "properties": {
@@ -200,7 +209,7 @@
                     "vmSize": "[parameters('vmSize')]"
                 },
                 "osProfile": {
-                    "computerName": "[variables('vmName')]",
+                    "computerName": "[concat(variables('resourcePrefix'),'VM',copyIndex(1))]",
                     "adminUsername": "[parameters('adminUsername')]",
                     "adminPassword": "[parameters('adminPassword')]",
                     "customData": "[base64('#cloud-config\npackage_upgrade: true\npackages:\n - nginx')]"
@@ -219,39 +228,39 @@
                 "networkProfile": {
                     "networkInterfaces": [
                         {
-                            "id": "[resourceId('Microsoft.Network/networkInterfaces',variables('nicName'))]"
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('resourcePrefix'),'VM',copyIndex(1),'-nic'))]"
+
                         }
                     ]
                 }
+            },
+            "copy": {
+                "name": "VMCopy",
+                "count": "[sub(parameters('vmCount'),1)]"
             }
         },
         {
-            "apiVersion": "2016-04-30-preview",
+            "apiVersion": "2019-07-01",
             "type": "Microsoft.Compute/virtualMachines",
-            "name": "[variables('vmName2')]",
+            "name": "[concat(variables('resourcePrefix'),'VM', parameters('vmCount')) ]",
             "location": "[parameters('location')]",
             "dependsOn": [
-                "[concat('Microsoft.Network/networkInterfaces/', variables('nicName2'))]",
-                "[concat('Microsoft.Compute/availabilitySets/', variables('availabilitySetName'))]"
+                "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('resourcePrefix'),'VM', parameters('vmCount'),'-nic'))]"
             ],
             "properties": {
-                "availabilitySet": {
-                    "id": "[resourceId('Microsoft.Compute/availabilitySets',variables('availabilitySetName'))]"
-                },
                 "hardwareProfile": {
                     "vmSize": "[parameters('vmSize')]"
                 },
                 "osProfile": {
-                    "computerName": "[variables('vmName2')]",
+                    "computerName": "[concat(variables('resourcePrefix'),'VM',parameters('vmCount'))]",
                     "adminUsername": "[parameters('adminUsername')]",
-                    "adminPassword": "[parameters('adminPassword')]",
-                    "customData": "[base64('#cloud-config\npackage_upgrade: true\npackages:\n - nginx')]"
+                    "adminPassword": "[parameters('adminPassword')]"
                 },
                 "storageProfile": {
                     "imageReference": {
-                        "publisher": "[variables('imagePublisher')]",
-                        "offer": "[variables('imageOffer')]",
-                        "sku": "[variables('ubuntuOSVersion')]",
+                        "publisher": "MicrosoftWindowsServer",
+                        "offer": "WindowsServer",
+                        "sku": "2016-Datacenter",
                         "version": "latest"
                     },
                     "osDisk": {
@@ -261,11 +270,11 @@
                 "networkProfile": {
                     "networkInterfaces": [
                         {
-                            "id": "[resourceId('Microsoft.Network/networkInterfaces',variables('nicName2'))]"
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('resourcePrefix'),'VM',parameters('vmCount'),'-nic'))]"
                         }
                     ]
                 }
             }
-        }
+        }       
     ]
 }
